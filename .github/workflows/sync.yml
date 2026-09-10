@@ -1,0 +1,38 @@
+name: Sync 5eTools content to Azure Blob Storage
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily, 03:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for OIDC login to Azure - no stored secret
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone 5eTools upstream mirrors
+        run: |
+          git clone --depth 1 https://github.com/5etools-mirror-3/5etools-src.git site
+          git clone --depth 1 https://github.com/5etools-mirror-3/5etools-img.git site/img
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # `sync` mirrors the source directory into $web, including deletions -
+      # matches the old VM setup's `git reset --hard` full-mirror semantics.
+      # --auth-mode login uses the OIDC-derived session, never an account
+      # key (the storage account has shared_access_key_enabled = false).
+      - name: Sync to $web static website container
+        run: |
+          az storage blob sync \
+            --account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
+            --container '$web' \
+            --source site \
+            --auth-mode login
