@@ -75,12 +75,21 @@ resource "azuread_service_principal" "github_actions" {
 
 resource "azuread_application_federated_identity_credential" "github_actions" {
   application_id = azuread_application.github_actions.id
-  display_name   = "github-actions-${replace(var.github_repo, "/", "-")}-${var.github_branch}"
+  display_name   = "github-actions-${var.github_repo_owner}-${var.github_repo_name}-${var.github_branch}"
   issuer         = "https://token.actions.githubusercontent.com"
   # Matches the subject GitHub puts in the OIDC token for scheduled/manually
   # dispatched runs against a specific branch (not a pull_request run - that
   # uses a different subject shape and would need its own credential).
-  subject   = "repo:${var.github_repo}:ref:refs/heads/${var.github_branch}"
+  #
+  # Repos created after 2026-07-15 default to GitHub's newer "immutable
+  # subject claim" format - repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/BRANCH
+  # (protects against a renamed/transferred repo minting tokens with an old
+  # subject) - not just repo:OWNER/REPO:ref:... like older repos still get.
+  # This repo was created after that date, so it's on the new format; the
+  # actual values came straight from a failed login's error message
+  # ("subject claim - repo:ChrisRei82@148950818/5eTools@1364337146:...").
+  # See: https://github.blog/changelog/2026-04-23-immutable-subject-claims-for-github-actions-oidc-tokens/
+  subject   = "repo:${var.github_repo_owner}@${var.github_repo_owner_id}/${var.github_repo_name}@${var.github_repo_id}:ref:refs/heads/${var.github_branch}"
   audiences = ["api://AzureADTokenExchange"]
 }
 
